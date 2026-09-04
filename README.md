@@ -212,7 +212,38 @@ next time you open the file in Excel or Google Sheets.
 
 ---
 
-## 10. Test cases covered
+## 11. Mobile / iOS friendliness
+
+PAYable is designed to feel like a native-ish app when used on an iPhone,
+whether that's Safari or "Add to Home Screen":
+
+- **Add to Home Screen**: `public/manifest.json` + Apple meta tags in
+  `layout.tsx` mean iOS shows PAYable's own icon (`public/apple-touch-icon.png`)
+  and a standalone, browser-chrome-free window when launched from the home
+  screen, with a dark translucent status bar to match the navbar.
+- **Bottom tab bar** (`src/components/BottomNav.tsx`): below the `sm`
+  breakpoint, navigation moves to a fixed iOS-style tab bar at the bottom
+  of the screen instead of the desktop top nav, with safe-area padding so
+  it never sits under the home indicator on notched iPhones.
+- **Safe areas**: `viewport-fit=cover` plus `env(safe-area-inset-*)`
+  padding on the sticky header and bottom nav keep content clear of the
+  notch/Dynamic Island and the home-indicator bar.
+- **No accidental zoom**: every form input is set to 16px, the minimum
+  iOS Safari won't auto-zoom into on focus — so filling out the "Add
+  Transaction" or "Record Payment" forms doesn't jump the viewport around.
+- **44pt tap targets**: buttons and inputs use Apple's minimum recommended
+  hit-area size (`min-h-[44px]`), and `touch-action: manipulation` removes
+  the ~300ms tap delay and double-tap-to-zoom on buttons.
+- **Native-feeling pickers**: date fields use `<input type="date">` (iOS's
+  built-in wheel picker) and amount fields use `inputMode="decimal"` to
+  bring up the numeric keypad instead of the full keyboard.
+- To swap in your own icon, replace the files in `public/` (`apple-touch-icon.png`,
+  `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) — keep the same
+  filenames and sizes and `manifest.json` needs no changes.
+
+---
+
+## 12. Test cases covered
 
 All six scenarios from the spec (plus overpay/round-trip settlement
 edge cases) are asserted in `src/lib/balance.test.ts`:
