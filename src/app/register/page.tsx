@@ -11,8 +11,7 @@ export default function RegisterPage() {
           </span>
           <h1 className="mt-3 text-xl font-semibold text-slate-900">Create your PAYable account</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Set a password, verify your email with a 6-digit code, then sign in. PAYable has room
-            for two people — the first two verified accounts are set up automatically.
+            Set a password, verify your email with a 6-digit code, then sign in.
           </p>
         </div>
 
