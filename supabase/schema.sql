@@ -208,7 +208,23 @@ group by debtor, creditor;
 -- all shared-ledger data — that's the point of a *shared* tracker. What
 -- RLS protects against here is anyone who is NOT one of the app's known
 -- users touching the data at all.
+--
+-- `is_known_user()` is SECURITY DEFINER on purpose: a policy that reads
+-- `users` from *inside* a policy on `users` itself (or references it
+-- from another table's policy) deadlocks under Postgres RLS and quietly
+-- returns zero rows to everyone. This function runs as its owner
+-- (bypassing RLS on `users`), so policies can safely check membership.
 -- ---------------------------------------------------------------------
+create or replace function public.is_known_user()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (select 1 from users where id = auth.uid());
+$$;
+
 alter table users enable row level security;
 alter table categories enable row level security;
 alter table transactions enable row level security;
@@ -216,40 +232,40 @@ alter table transaction_splits enable row level security;
 alter table payments enable row level security;
 
 create policy "known users can read users" on users
-  for select using (auth.uid() in (select id from users));
+  for select using (public.is_known_user());
 
 create policy "users can update own profile" on users
   for update using (auth.uid() = id);
 
 create policy "known users can read categories" on categories
-  for select using (auth.uid() in (select id from users));
+  for select using (public.is_known_user());
 
 create policy "known users can read transactions" on transactions
-  for select using (auth.uid() in (select id from users));
+  for select using (public.is_known_user());
 create policy "known users can insert transactions" on transactions
-  for insert with check (auth.uid() in (select id from users));
+  for insert with check (public.is_known_user());
 create policy "known users can update transactions" on transactions
-  for update using (auth.uid() in (select id from users));
+  for update using (public.is_known_user());
 create policy "known users can delete transactions" on transactions
-  for delete using (auth.uid() in (select id from users));
+  for delete using (public.is_known_user());
 
 create policy "known users can read splits" on transaction_splits
-  for select using (auth.uid() in (select id from users));
+  for select using (public.is_known_user());
 create policy "known users can insert splits" on transaction_splits
-  for insert with check (auth.uid() in (select id from users));
+  for insert with check (public.is_known_user());
 create policy "known users can update splits" on transaction_splits
-  for update using (auth.uid() in (select id from users));
+  for update using (public.is_known_user());
 create policy "known users can delete splits" on transaction_splits
-  for delete using (auth.uid() in (select id from users));
+  for delete using (public.is_known_user());
 
 create policy "known users can read payments" on payments
-  for select using (auth.uid() in (select id from users));
+  for select using (public.is_known_user());
 create policy "known users can insert payments" on payments
-  for insert with check (auth.uid() in (select id from users));
+  for insert with check (public.is_known_user());
 create policy "known users can update payments" on payments
-  for update using (auth.uid() in (select id from users));
+  for update using (public.is_known_user());
 create policy "known users can delete payments" on payments
-  for delete using (auth.uid() in (select id from users));
+  for delete using (public.is_known_user());
 
 -- ---------------------------------------------------------------------
 -- Seed the two users AFTER creating them in Supabase Auth. Run this

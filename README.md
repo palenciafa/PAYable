@@ -82,13 +82,21 @@ Open the Supabase SQL Editor and run the entire contents of
 indexes, the split-sum trigger, the `pairwise_debts` view, and Row Level
 Security policies, and seeds the nine default categories.
 
-### 3.3 Create the two auth users
-In Supabase Dashboard → Authentication → Users → **Add user**, create one
-account for you and one for your friend (email + password is simplest).
-Copy each user's UUID.
+### 3.3 Set up the two people
 
-### 3.4 Seed the `users` table
-Back in the SQL Editor:
+You have two options — pick whichever is easier. Both end with two rows in
+Auth (`auth.users`) and two matching rows in the app's `users` table.
+
+**Option A — self-service (recommended):** skip straight to step 4, run
+the app, and have each person visit `/register`, enter their name and
+email, and verify the 6-digit code sent to them. PAYable auto-provisions
+the *first two* verified accounts into the `users` table and rejects a
+third — see §3.5 to make sure the code email actually gets sent.
+
+**Option B — manual, password-based:** in Supabase Dashboard →
+Authentication → Users → **Add user**, create one account for you and one
+for your friend (email + password), copy each user's UUID, then in the
+SQL Editor:
 
 ```sql
 insert into users (id, name, email) values
@@ -97,7 +105,42 @@ insert into users (id, name, email) values
 ```
 
 Use whatever display names you actually want — they show up everywhere in
-the app and in the Excel export.
+the app and in the Excel export. With Option B, sign in on `/login` using
+the **Password** tab.
+
+### 3.4 (Only if you used Option A) Nothing else to do
+Registration handles the `users` insert for you. If you ever need to
+double check who's registered:
+
+```sql
+select id, name, email, created_at from users order by created_at;
+```
+
+### 3.5 Email OTP setup — required for the 6-digit code to be visible
+
+By default, Supabase's auth emails show a **magic-link button**, not a
+literal code — the 6-digit token exists but isn't in the email unless the
+template says so. Fix this once, in Supabase Dashboard → Authentication →
+Email Templates:
+
+1. Open **Magic Link** (used for `/login`'s "Email code" tab and for
+   `/register` when the email doesn't need confirmation) and **Confirm
+   signup** (used the first time a brand-new email registers, if your
+   project has "Confirm email" turned on).
+2. In each template's body, add `{{ .Token }}` somewhere visible, e.g.:
+   ```
+   Your PAYable code is: {{ .Token }}
+   ```
+   You can leave the existing `{{ .ConfirmationURL }}` link in too — the
+   app only uses the code, so the link is just a fallback.
+3. Save both templates.
+
+If you'd rather not edit templates, Authentication → Providers → Email
+also has an **"Enable email OTP"** style toggle in newer Supabase
+projects that does this for you automatically — check there first.
+
+Without this step, `/register` and the "Email code" login tab will still
+*send* an email, it just won't contain a code the person can type in.
 
 ---
 
@@ -209,6 +252,39 @@ next time you open the file in Excel or Google Sheets.
   in the form, a real rejection in the server action if someone bypasses
   the UI, and a Postgres trigger as the last line of defense — the
   database itself will refuse to save mismatched splits.
+
+---
+
+## 10. Authentication: password vs. email code
+
+PAYable supports two sign-in methods side by side; use whichever suits
+each person:
+
+- **`/login` → Password tab**: classic email + password, for accounts
+  created via Supabase Dashboard (Option B in §3.3).
+- **`/login` → Email code tab**: passwordless — enter your email, get a
+  6-digit code, type it in. Only works for emails that already have an
+  account (won't create one); if it can't find you, it points you to
+  `/register`.
+- **`/register`**: name + email → 6-digit code → done. No password is
+  ever set on this path. The **first two** verified accounts are
+  automatically inserted into `users`; a third registration attempt gets
+  signed in (so they have a valid login) but is *not* added to the shared
+  ledger — they'll see the same "ask whoever set up the app to add your
+  account" message as anyone else who isn't provisioned yet.
+
+Both the register flow and the OTP login tab call
+[`requestEmailCode` / `verifyEmailCode`](src/lib/actions/auth-otp.ts),
+which wrap `supabase.auth.signInWithOtp()` / `verifyOtp()`. Provisioning
+uses the service-role client (`createAdminClient()`) specifically because
+a brand-new, not-yet-provisioned account has no RLS access to `users` —
+see §3.5 for the one manual Supabase step this depends on (making the
+code actually appear in the email).
+
+**Why cap it at two**: this is a private, two-person ledger — RLS already
+keeps unprovisioned accounts from touching any data, but capping
+registration itself means a stranger who finds the URL can create a login
+but never occupies one of the two seats, even by accident.
 
 ---
 
