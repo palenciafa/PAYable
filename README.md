@@ -88,10 +88,12 @@ You have two options — pick whichever is easier. Both end with two rows in
 Auth (`auth.users`) and two matching rows in the app's `users` table.
 
 **Option A — self-service (recommended):** skip straight to step 4, run
-the app, and have each person visit `/register`, enter their name and
-email, and verify the 6-digit code sent to them. PAYable auto-provisions
-the *first two* verified accounts into the `users` table and rejects a
-third — see §3.5 to make sure the code email actually gets sent.
+the app, and have each person visit `/register`: name, email, a
+password, then verify the 6-digit code sent to them. That confirms the
+account — they then sign in for real on `/login` with the password they
+just set. PAYable auto-provisions the *first two* verified accounts into
+the `users` table and rejects a third — see §3.5 and §3.6 to make sure
+this actually works end-to-end.
 
 **Option B — manual, password-based:** in Supabase Dashboard →
 Authentication → Users → **Add user**, create one account for you and one
@@ -116,17 +118,24 @@ double check who's registered:
 select id, name, email, created_at from users order by created_at;
 ```
 
-### 3.5 Email OTP setup — required for the 6-digit code to be visible
+### 3.5 Turn on "Confirm email" — required for registration to work
+
+`/register` relies on Supabase treating a new account as unconfirmed
+until its code is verified. In Supabase Dashboard → Authentication →
+Providers → **Email**, make sure **"Confirm email"** is switched **on**
+(it's on by default for new projects, but double-check). With it off,
+`signUp()` signs the account in immediately and there's nothing for the
+OTP step to confirm.
+
+### 3.6 Email OTP setup — required for the 6-digit code to be visible
 
 By default, Supabase's auth emails show a **magic-link button**, not a
 literal code — the 6-digit token exists but isn't in the email unless the
 template says so. Fix this once, in Supabase Dashboard → Authentication →
 Email Templates:
 
-1. Open **Magic Link** (used for `/login`'s "Email code" tab and for
-   `/register` when the email doesn't need confirmation) and **Confirm
-   signup** (used the first time a brand-new email registers, if your
-   project has "Confirm email" turned on).
+1. Open **Confirm signup** (sent when someone registers on `/register`)
+   and **Magic Link** (sent by `/login`'s "Email code" tab).
 2. In each template's body, add `{{ .Token }}` somewhere visible, e.g.:
    ```
    Your PAYable code is: {{ .Token }}
@@ -134,10 +143,6 @@ Email Templates:
    You can leave the existing `{{ .ConfirmationURL }}` link in too — the
    app only uses the code, so the link is just a fallback.
 3. Save both templates.
-
-If you'd rather not edit templates, Authentication → Providers → Email
-also has an **"Enable email OTP"** style toggle in newer Supabase
-projects that does this for you automatically — check there first.
 
 Without this step, `/register` and the "Email code" login tab will still
 *send* an email, it just won't contain a code the person can type in.
@@ -255,36 +260,35 @@ next time you open the file in Excel or Google Sheets.
 
 ---
 
-## 10. Authentication: password vs. email code
+## 10. Authentication: register → verify → log in → dashboard
 
-PAYable supports two sign-in methods side by side; use whichever suits
-each person:
+- **`/register`** — name, email, and a password → Send code. This calls
+  `supabase.auth.signUp()`, which creates the account in an **unconfirmed**
+  state (see §3.5). A 6-digit code arrives by email.
+- Entering the code calls `verifyOtp({ type: "signup" })`, which confirms
+  the account and — if a seat is free — adds it to the shared `users`
+  table. The app then **deliberately signs that session back out** and
+  sends the person to `/login?registered=1` (shown with a "verified, sign
+  in below" banner). Registering does **not** drop you straight into the
+  dashboard on purpose.
+- **`/login`** — the person now signs in for real with the email +
+  password they just set (**Password** tab), and only then reaches the
+  dashboard. There's also an **Email code** tab as a passwordless
+  alternative for already-provisioned accounts (`shouldCreateUser: false`
+  — it never creates a new account, only signs an existing one in).
 
-- **`/login` → Password tab**: classic email + password, for accounts
-  created via Supabase Dashboard (Option B in §3.3).
-- **`/login` → Email code tab**: passwordless — enter your email, get a
-  6-digit code, type it in. Only works for emails that already have an
-  account (won't create one); if it can't find you, it points you to
-  `/register`.
-- **`/register`**: name + email → 6-digit code → done. No password is
-  ever set on this path. The **first two** verified accounts are
-  automatically inserted into `users`; a third registration attempt gets
-  signed in (so they have a valid login) but is *not* added to the shared
-  ledger — they'll see the same "ask whoever set up the app to add your
-  account" message as anyone else who isn't provisioned yet.
+So the full loop is exactly: **register (with OTP) → login → dashboard**,
+with the OTP code acting purely as email verification during signup, not
+as a way to skip logging in afterward.
 
-Both the register flow and the OTP login tab call
-[`requestEmailCode` / `verifyEmailCode`](src/lib/actions/auth-otp.ts),
-which wrap `supabase.auth.signInWithOtp()` / `verifyOtp()`. Provisioning
-uses the service-role client (`createAdminClient()`) specifically because
-a brand-new, not-yet-provisioned account has no RLS access to `users` —
-see §3.5 for the one manual Supabase step this depends on (making the
-code actually appear in the email).
-
-**Why cap it at two**: this is a private, two-person ledger — RLS already
-keeps unprovisioned accounts from touching any data, but capping
-registration itself means a stranger who finds the URL can create a login
-but never occupies one of the two seats, even by accident.
+**Two-seat cap**: PAYable is a two-person ledger, so only the *first two*
+verified registrations are added to `users`
+(`src/lib/actions/auth-otp.ts` → `provisionIfSlotAvailable`, using the
+service-role client since a brand-new account has no RLS access to
+`users` yet — see `is_known_user()` in `schema.sql`). A third
+registration still confirms and can log in, but isn't added to the
+ledger — they'd see the same "ask whoever set up the app to add you"
+message anyone unprovisioned sees on the dashboard.
 
 ---
 

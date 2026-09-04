@@ -49,13 +49,17 @@ export const loginInputSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-export const emailOtpRequestSchema = z.object({
+export const registerRequestSchema = z.object({
+  name: z.string().trim().min(1, "Enter your name").max(60),
   email: z.string().trim().email("Enter a valid email"),
-  name: z.string().trim().min(1, "Enter your name").max(60).optional(),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+export const loginCodeRequestSchema = z.object({
+  email: z.string().trim().email("Enter a valid email"),
 });
 
 export const emailOtpVerifySchema = z.object({
   email: z.string().trim().email("Enter a valid email"),
   token: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code"),
-  name: z.string().trim().min(1).max(60).optional(),
 });

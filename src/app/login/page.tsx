@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import { login } from "./actions";
 import { Input } from "@/components/ui/Input";
@@ -17,9 +18,11 @@ function SubmitButton() {
   );
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const [state, formAction] = useFormState(login, null);
   const [tab, setTab] = useState<"password" | "code">("password");
+  const searchParams = useSearchParams();
+  const justRegistered = searchParams.get("registered") === "1";
 
   return (
     <div className="flex min-h-[80vh] items-center justify-center">
@@ -31,6 +34,12 @@ export default function LoginPage() {
           <h1 className="mt-3 text-xl font-semibold text-slate-900">Welcome to PAYable</h1>
           <p className="mt-1 text-sm text-slate-500">Sign in to see who owes who.</p>
         </div>
+
+        {justRegistered && (
+          <div className="mb-5 rounded-xl bg-owed-light px-3.5 py-2.5 text-sm text-owed-dark">
+            Account verified! Sign in below to continue.
+          </div>
+        )}
 
         <div className="mb-5 flex gap-1 rounded-xl bg-slate-100 p-1">
           <button
@@ -80,5 +89,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }
